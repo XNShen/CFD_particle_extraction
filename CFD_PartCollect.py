@@ -58,27 +58,35 @@ def chunk_process(chunk, host):
     !!!!!
     '''
     import numpy as np
-    sn_tag = re.compile('[+\-]?(?:0|[1-9]\d*)(?:\.\d*)?(?:[eE][+\-]?\d+)?') # scientific notation
-    r_tag = re.compile('injection-[\d]*c-[\d]*[.][\d]*-[\d]*')
+    # scienfic notation. ?: indicts non-capturing group
+    sn_tag = re.compile('[+\-]?(?:0|[1-9]\d*)(?:\.\d*)?(?:[eE][+\-]?\d+)?')
+    # injection information in the style of 'injection-75-142.9  198'
+    r_tag = re.compile('injection-([-+]?[0-9]*\.?[0-9]+)-([-+]?[0-9]*\.?[0-9]+)[\s-](\d*)')
     
-#    trapped_tag = re.compile('Trapped - Zone')
+#   trapped_tag = re.compile('Trapped - Zone')
     escaped_tag = re.compile('Escaped - Zone')
     basicInfo = [] # diameter and angle
 #    trapped_temp = {}    
     escaped_temp = {}
     
+#   extract 'injection-75-141' style expression    
     for i in range(np.size(chunk)):
+        # find 'Escaped - Zone' line
         if (escaped_tag.search(chunk[i]) != None):
+            # find injection information 'injection-75-142.9  198'
             if(r_tag.search(chunk[i]) != None):
-                r = np.abs(np.float(sn_tag.findall(r_tag.findall(chunk[i])[0])[1]))
-                basicInfo.append(np.abs(np.float(sn_tag.findall(r_tag.findall(chunk[i])[0])[0])))
-                basicInfo.append(np.abs(np.float(sn_tag.findall(r_tag.findall(chunk[i])[0])[2])))
+                # This is the injection info section
+                # extract the numbers of the 'injection...' string
+                r_list  = {np.float(x) for x in r_tag.findall(chunk[i])[0])}
+                r       = r_list[1]
+                basicInfo.append(r_list[0])
+                basicInfo.append(r_list[2])
             else:
+                # This is the injection results section
                 stats = map(float, sn_tag.findall(chunk[i]))
                 stats[0] = int(stats[0])
                 escaped_temp[stats[0]] = stats[1:]
                 host[r] = escaped_temp
-    
     return basicInfo 
     
 def writeExcel(fileName, host, basicInfo):
