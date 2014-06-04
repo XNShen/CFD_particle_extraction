@@ -29,22 +29,18 @@ def readExcel(fileName, tag):
             colName         -- 1 x N list of the set parameter
     '''
     import numpy as np
+    import pandas as pd
     from xlrd import open_workbook
 
     # global data buffer for processing
-    maxRow = 10000l
-    maxCol = 10000l
-    dataCollection = np.empty([maxRow, maxCol, 4])    
     rowName = []
     colName = []
    
     sheetIndex = 0
     book = open_workbook(fileName)
     sheet = book.sheet_by_index(sheetIndex)
-    host = {}
-    basicInfo = []
     
-
+    dataGroup = None
     
     # for each column, read in the entire section into memory for processing    
     for colNum in range(sheet.ncols):  # loop through columns
@@ -52,31 +48,33 @@ def readExcel(fileName, tag):
         if (sheet.cell(0, colNum) != ''):
             # if the header string exist, continue reading the column
             # otherwise jump the next column
+            colName.append(sheet.cell(0, colNum))
+            
             col_values = sheet.col_values(colNum) # grab values
             # Grab the data marked between tags
             for ind, x in enumerate(col_values): 
                 if (tag.search(x) != None): 
                     # find the next chunk of data 
                     chunk = []
-                    counter = 1
                     
                     # above the sheet bottom & not at the next block
                     while((ind + counter) < sheet.nrows and \
-                    (tag.search(col_values[ind + counter]) == None):                        
+                    (tag.search(col_values[ind + counter]) == None)):                        
                         chunk.append(col_values[ind + counter])
-                        counter += 1
-                        basicInfo = chunk_process(chunk, host)
-                    
-                    # load the data into the dataCollection
-                    dataCollection[]
-        
-                    i += counter
 
-            col_counter = col_counter+1
+                        dataSeg, rowName = chunk_process(chunk, host)
+                        # load the data into the entire data 'dataOut'
+                        if dataGroup == None:
+                            dataOut = pd.DataFrame(dataSeg, index=rowName, \
+                                                columns=[sheet.cell(0, colNum)])
+                        else:
+                            dataTemp = pd.DataFrame(dataSeg, index=rowName, \
+                                                columns=[sheet.cell(0, colNum)]))
+                            dataOut  = pd.concat([dataOut, dataTemp], join='outer')
         
-    return host, basicInfo
+    return dataOut
 
-def chunk_process(chunk, host):
+def chunk_process(chunk):
     '''
     Extract the collection data of each chunk from Excel 
     '''
@@ -89,15 +87,15 @@ def chunk_process(chunk, host):
     escaped_tag = re.compile('Escaped - Zone')
     # labeling the final results of the particle tracking.
     res_tag = 'Mass Transfer Summary'    
+    # characters for separating counting lines
     sepChar = '----'
     collectionStatus = ['Incomplete', 'Trapped', 'Escaped', 'Net']
     # regular expression for " Trapped - Zone 22       1.042e-04  1.042e-04  0.000e+00"
     pat = r'\s+(\w+).(-.\w+\s\d+)?\s+(\d+\.\d+[e|E][+|-]\d+)\s+(\d+\.\d+[e|E][+|-]\d+)\s+(\d+\.\d+[e|E][+|-]\d+)' 
 
+    # buffer results for each segment
     dataArray = np.zeros((500, 4))
-    diaList = [] # diameter and angle
-#   trapped_temp = {}    
-    escaped_temp = {}
+    diaList = []    # diameter list
     
     # extract 'injection-75-141' style expression    
     # looping through the given column
@@ -112,7 +110,7 @@ def chunk_process(chunk, host):
                 dia     = r_list[0]
                 # forming the row name
                 diaList.append(dia)
-        # find '
+
         # This is the injection results section
         # starting here "Trapped", "Escaped", "Incomplete" & "Net" are analyzed
         # separately
@@ -172,7 +170,7 @@ def chunk_process(chunk, host):
         else:
             i = i+1
             
-    return (dataArray[0:sizeCnt,:], groupInd, groupLabel)
+    return dataArray[0:sizeCnt,:], diaList
 
     # This is the injection results section
     # starting here "Trapped", "Escaped", "Incomplete" & "Net" are analyzed
