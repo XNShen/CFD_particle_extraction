@@ -64,13 +64,15 @@ def readExcel(fileName, tag):
                         dataSeg, rowName = chunk_process(chunk)
                         # load the data into the entire data 'dataOut'
                         if dataGroup == None:
-                            dataGroup = pd.DataFrame(dataSeg, index=rowName, \
-                                                columns=[sheet.cell(0, colNum)])
+                            dataGroup = {pd.DataFrame(dataSeg[:,x], index=rowName, \
+                                                columns=[sheet.cell(0, colNum)])   \
+                                                for x in range(4)}                                  
                         else:
-                            dataTemp = pd.DataFrame(dataSeg, index=rowName, \
-                                                columns=[sheet.cell(0, colNum)])
-                            dataGroup = pd.concat([dataGroup, dataTemp], join='outer')
-                    
+                            dataTemp = {pd.DataFrame(dataSeg[:,x], index=rowName, \
+                                                columns=[sheet.cell(0, colNum)])   \
+                                                for x in range(4)}       
+                            dataGroup = {pd.concat([dataGroup[i],dataTemp[i]], join='outer') \
+                                                for i in range(4)}                                         
                     ind += counter
         
     return dataGroup
@@ -157,7 +159,7 @@ def chunk_process(chunk):
                     else:
                         print 'Regular expression confronted unexpected pattern (Reading Net)'
                         print 'The matched string is: %s' %match.group()
-                        print 'The original string is: %s' %chunk(i+5+k))                       
+                        print 'The original string is: %s' %chunk(i+5+k)                    
                 else:
                     print 'Regular expression mis-match'
                     print 'The original string is: %s' %chunk(i+5+k)
