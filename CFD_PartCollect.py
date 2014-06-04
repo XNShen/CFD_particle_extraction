@@ -19,7 +19,7 @@ def readExcel(fileName, tag):
     '''
     reads and extracts info from the given excel file
     Input:  fileName -- file name including the directory path
-            tag -- ??
+            tag -- Identifier to the next reading block
     Output: dataCollection  -- M x N x 4 
                                M: row num, indicting the diameter
                                N: col num, indicting the set parameter
@@ -30,68 +30,149 @@ def readExcel(fileName, tag):
     '''
     import numpy as np
     from xlrd import open_workbook
-    
+
+    # global data buffer for processing
+    maxRow = 10000l
+    maxCol = 10000l
+    dataCollection = np.empty([maxRow, maxCol, 4])    
+    rowName = []
+    colName = []
+   
     sheetIndex = 0
     book = open_workbook(fileName)
     sheet = book.sheet_by_index(sheetIndex)
     host = {}
     basicInfo = []
     
-    for colNum in range(sheet.ncols):  # loop through columns. 
+
+    
+    # for each column, read in the entire section into memory for processing    
+    for colNum in range(sheet.ncols):  # loop through columns
+        col_counter = 0l
         if (sheet.cell(0, colNum) != ''):
+            # if the header string exist, continue reading the column
+            # otherwise jump the next column
             col_values = sheet.col_values(colNum) # grab values
-            
             # Grab the data marked between tags
-            for i in range(np.size(col_values)):
-                if (tag.search(str(col_values[i])) != None):
-                    
+            for ind, x in enumerate(col_values): 
+                if (tag.search(x) != None): 
+                    # find the next chunk of data 
                     chunk = []
                     counter = 1
                     
-                    while((i + counter) < np.size(col_values) and \
-                    tag.search(str(col_values[i + counter])) == None):                        
-                        chunk.append(col_values[i + counter])
+                    # above the sheet bottom & not at the next block
+                    while((ind + counter) < sheet.nrows and \
+                    (tag.search(col_values[ind + counter]) == None):                        
+                        chunk.append(col_values[ind + counter])
                         counter += 1
                         basicInfo = chunk_process(chunk, host)
-                        
+                    
+                    # load the data into the dataCollection
+                    dataCollection[]
+        
                     i += counter
-    
+
+            col_counter = col_counter+1
+        
     return host, basicInfo
 
 def chunk_process(chunk, host):
     '''
-    Grab infomation in the chunks given
-    !!!!!
-    Doesn't handle trapped particle case yet
-    !!!!!
+    Extract the collection data of each chunk from Excel 
     '''
     import numpy as np
     # scienfic notation. ?: indicts non-capturing group
     sn_tag = re.compile('[+\-]?(?:0|[1-9]\d*)(?:\.\d*)?(?:[eE][+\-]?\d+)?')
     # injection information in the style of 'injection-75-142.9  198'
-    r_tag = re.compile('injection-([-+]?[0-9]*\.?[0-9]+)-([-+]?[0-9]*\.?[0-9]+)')
+    r_tag = re.compile('injection-(?:[-+]?[0-9]*\.?[0-9]+)-([-+]?[0-9]*\.?[0-9]+)')
     # trapped_tag = re.compile('Trapped - Zone')
     escaped_tag = re.compile('Escaped - Zone')
     # labeling the final results of the particle tracking.
+    res_tag = 'Mass Transfer Summary'    
+    sepChar = '----'
     collectionStatus = ['Incomplete', 'Trapped', 'Escaped', 'Net']
+    # regular expression for " Trapped - Zone 22       1.042e-04  1.042e-04  0.000e+00"
+    pat = r'\s+(\w+).(-.\w+\s\d+)?\s+(\d+\.\d+[e|E][+|-]\d+)\s+(\d+\.\d+[e|E][+|-]\d+)\s+(\d+\.\d+[e|E][+|-]\d+)' 
 
-    basicInfo = [] # diameter and angle
-#    trapped_temp = {}    
+    dataArray = np.zeros((500, 4))
+    diaList = [] # diameter and angle
+#   trapped_temp = {}    
     escaped_temp = {}
     
-#   extract 'injection-75-141' style expression    
+    # extract 'injection-75-141' style expression    
+    # looping through the given column
     for i in range(np.size(chunk)):
-        # find 'Escaped - Zone' line
+        # find 'Escaped - Zone' line -- input information
         if (escaped_tag.search(chunk[i]) != None):
             # find injection information 'injection-75-142.9  198'
             if(r_tag.search(chunk[i]) != None):
                 # This is the injection info section
                 # extract the numbers of the 'injection...' string
                 r_list  = {np.float(x) for x in r_tag.findall(chunk[i])[0]}
-                r       = r_list[1]
-                basicInfo.append(r_list[0])
-                basicInfo.append(r_list[2])
-    return basicInfo 
+                dia     = r_list[0]
+                # forming the row name
+                diaList.append(dia)
+        # find '
+        # This is the injection results section
+        # starting here "Trapped", "Escaped", "Incomplete" & "Net" are analyzed
+        # separately
+        if (res_tag.search(chunk[i]) != None):
+        # find the 'mass transfer summary' name tag
+            k = 0                       # advancing index 
+            SingleLineMarker = 0        # Possible single results
+            # Read each line of the summary results
+            # '- - - -' is the separation line
+            while not (sepChar in sheet.cell_value(i+5+k,j)):  
+            # still in the detail report
+                match = re.search(pat, sheet.cell_value(i+5+k,j))  
+                # extract the mass fraction
+                if match:  # regular expression matching successful
+                    if match.group(1) in collectionStatus:  
+                        index = collectionStatus.index(match.group(1))
+                        dataArray[sizeCnt, index] = float(match.group(3))
+                    else:
+                        print 'The initial items are unexpected.'
+                        print 'The matched string is: %s' %match.group()
+                        print 'The original string is: %s' %sheet.cell_value(i+5+k,j)                       
+                else: # match failed indict the summary has only a single line
+                    #print 'Regular expression confronts unexpected patterns. (Reading results)'
+                    #print 'The original string is: %s' %sheet.cell_value(i+5+k,j)                       
+                    SingleLineMarker = 1     
+                    break   # indict "Trapped" is complete
+                k = k + 1
+            
+            # - - - - 
+            # When '- - - -' is met, move the next line
+            if SingleLineMarker < 1:
+                k = k+1
+                match = re.search(pat, sheet.cell_value(i+5+k,j))  
+                # extract the mass fraction
+                if match:  # regular expression matching successful
+                    if match.group(1) in collectionStatus:  
+                        index = collectionStatus.index(match.group(1))
+                        if index == 3:
+                            dataArray[sizeCnt, index] = float(match.group(3))
+                        else:
+                            print 'Index is %d' % index
+                            print 'The line should start with *Net*'
+                            print 'The original string is: %s' %sheet.cell_value(i+5+k,j)                       
+                    else:
+                        print 'Regular expression confronted unexpected pattern (Reading Net)'
+                        print 'The matched string is: %s' %match.group()
+                        print 'The original string is: %s' %sheet.cell_value(i+5+k,j)                       
+                else:
+                    print 'Regular expression mis-match'
+                    print 'The original string is: %s' %sheet.cell_value(i+5+k,j) 
+            else:
+                # if SingLeLineMarker on, copy the previous line
+                dataArray[sizeCnt, 3] =  dataArray[sizeCnt, index]
+                    
+            sizeCnt=sizeCnt+1   # 'Mass Transfer Summary' is found 
+            i = i+k+5           # jump the next block
+        else:
+            i = i+1
+            
+    return (dataArray[0:sizeCnt,:], groupInd, groupLabel)
 
     # This is the injection results section
     # starting here "Trapped", "Escaped", "Incomplete" & "Net" are analyzed
