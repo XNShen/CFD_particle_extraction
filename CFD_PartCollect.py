@@ -77,7 +77,7 @@ def chunk_process(chunk, host):
             if(r_tag.search(chunk[i]) != None):
                 # This is the injection info section
                 # extract the numbers of the 'injection...' string
-                r_list  = {np.float(x) for x in r_tag.findall(chunk[i])[0])}
+                r_list  = {np.float(x) for x in r_tag.findall(chunk[i])[0]}
                 r       = r_list[1]
                 basicInfo.append(r_list[0])
                 basicInfo.append(r_list[2])
