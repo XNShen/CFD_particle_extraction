@@ -28,7 +28,6 @@ def readExcel(fileName, tag):
             rowName         -- 1 x M list of the diameter
             colName         -- 1 x N list of the set parameter
     '''
-    import numpy as np
     import pandas as pd
     from xlrd import open_workbook
 
@@ -39,12 +38,11 @@ def readExcel(fileName, tag):
     sheetIndex = 0
     book = open_workbook(fileName)
     sheet = book.sheet_by_index(sheetIndex)
-    
+   
     dataGroup = None
     
     # for each column, read in the entire section into memory for processing    
     for colNum in range(sheet.ncols):  # loop through columns
-        col_counter = 0l
         if (sheet.cell(0, colNum) != ''):
             # if the header string exist, continue reading the column
             # otherwise jump the next column
@@ -56,31 +54,32 @@ def readExcel(fileName, tag):
                 if (tag.search(x) != None): 
                     # find the next chunk of data 
                     chunk = []
+                    counter = 1
                     
                     # above the sheet bottom & not at the next block
                     while((ind + counter) < sheet.nrows and \
                     (tag.search(col_values[ind + counter]) == None)):                        
                         chunk.append(col_values[ind + counter])
-
-                        dataSeg, rowName = chunk_process(chunk, host)
+                        counter += 1
+                        dataSeg, rowName = chunk_process(chunk)
                         # load the data into the entire data 'dataOut'
                         if dataGroup == None:
-                            dataOut = pd.DataFrame(dataSeg, index=rowName, \
+                            dataGroup = pd.DataFrame(dataSeg, index=rowName, \
                                                 columns=[sheet.cell(0, colNum)])
                         else:
                             dataTemp = pd.DataFrame(dataSeg, index=rowName, \
-                                                columns=[sheet.cell(0, colNum)]))
-                            dataOut  = pd.concat([dataOut, dataTemp], join='outer')
+                                                columns=[sheet.cell(0, colNum)])
+                            dataGroup = pd.concat([dataGroup, dataTemp], join='outer')
+                    
+                    ind += counter
         
-    return dataOut
+    return dataGroup
 
 def chunk_process(chunk):
     '''
     Extract the collection data of each chunk from Excel 
     '''
     import numpy as np
-    # scienfic notation. ?: indicts non-capturing group
-    sn_tag = re.compile('[+\-]?(?:0|[1-9]\d*)(?:\.\d*)?(?:[eE][+\-]?\d+)?')
     # injection information in the style of 'injection-75-142.9  198'
     r_tag = re.compile('injection-(?:[-+]?[0-9]*\.?[0-9]+)-([-+]?[0-9]*\.?[0-9]+)')
     # trapped_tag = re.compile('Trapped - Zone')
@@ -90,6 +89,7 @@ def chunk_process(chunk):
     # characters for separating counting lines
     sepChar = '----'
     collectionStatus = ['Incomplete', 'Trapped', 'Escaped', 'Net']
+    sizeCnt = 0
     # regular expression for " Trapped - Zone 22       1.042e-04  1.042e-04  0.000e+00"
     pat = r'\s+(\w+).(-.\w+\s\d+)?\s+(\d+\.\d+[e|E][+|-]\d+)\s+(\d+\.\d+[e|E][+|-]\d+)\s+(\d+\.\d+[e|E][+|-]\d+)' 
 
@@ -120,9 +120,9 @@ def chunk_process(chunk):
             SingleLineMarker = 0        # Possible single results
             # Read each line of the summary results
             # '- - - -' is the separation line
-            while not (sepChar in sheet.cell_value(i+5+k,j)):  
+            while not (sepChar in chunk(i+5+k)):  
             # still in the detail report
-                match = re.search(pat, sheet.cell_value(i+5+k,j))  
+                match = re.search(pat, chunk(i+5+k))  
                 # extract the mass fraction
                 if match:  # regular expression matching successful
                     if match.group(1) in collectionStatus:  
@@ -131,7 +131,7 @@ def chunk_process(chunk):
                     else:
                         print 'The initial items are unexpected.'
                         print 'The matched string is: %s' %match.group()
-                        print 'The original string is: %s' %sheet.cell_value(i+5+k,j)                       
+                        print 'The original string is: %s' %chunk(i+5+k)                       
                 else: # match failed indict the summary has only a single line
                     #print 'Regular expression confronts unexpected patterns. (Reading results)'
                     #print 'The original string is: %s' %sheet.cell_value(i+5+k,j)                       
@@ -143,7 +143,7 @@ def chunk_process(chunk):
             # When '- - - -' is met, move the next line
             if SingleLineMarker < 1:
                 k = k+1
-                match = re.search(pat, sheet.cell_value(i+5+k,j))  
+                match = re.search(pat,chunk(i+5+k))  
                 # extract the mass fraction
                 if match:  # regular expression matching successful
                     if match.group(1) in collectionStatus:  
@@ -153,14 +153,14 @@ def chunk_process(chunk):
                         else:
                             print 'Index is %d' % index
                             print 'The line should start with *Net*'
-                            print 'The original string is: %s' %sheet.cell_value(i+5+k,j)                       
+                            print 'The original string is: %s' %chunk(i+5+k)
                     else:
                         print 'Regular expression confronted unexpected pattern (Reading Net)'
                         print 'The matched string is: %s' %match.group()
-                        print 'The original string is: %s' %sheet.cell_value(i+5+k,j)                       
+                        print 'The original string is: %s' %chunk(i+5+k))                       
                 else:
                     print 'Regular expression mis-match'
-                    print 'The original string is: %s' %sheet.cell_value(i+5+k,j) 
+                    print 'The original string is: %s' %chunk(i+5+k)
             else:
                 # if SingLeLineMarker on, copy the previous line
                 dataArray[sizeCnt, 3] =  dataArray[sizeCnt, index]
