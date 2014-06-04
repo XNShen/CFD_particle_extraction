@@ -18,6 +18,15 @@ import re
 def readExcel(fileName, tag):
     '''
     reads and extracts info from the given excel file
+    Input:  fileName -- file name including the directory path
+            tag -- ??
+    Output: dataCollection  -- M x N x 4 
+                               M: row num, indicting the diameter
+                               N: col num, indicting the set parameter
+                               4: four types of the collection, i.e. 
+                               "Escaped", "Trapped", "Incomplete", "Net"
+            rowName         -- 1 x M list of the diameter
+            colName         -- 1 x N list of the set parameter
     '''
     import numpy as np
     from xlrd import open_workbook
@@ -28,8 +37,7 @@ def readExcel(fileName, tag):
     host = {}
     basicInfo = []
     
-    for colNum in range(np.size(sheet.row_values(0))):
-        # loop through columns. End of file is defined by two adjacent empty columns
+    for colNum in range(sheet.ncols):  # loop through columns. 
         if (sheet.cell(0, colNum) != ''):
             col_values = sheet.col_values(colNum) # grab values
             
@@ -61,10 +69,12 @@ def chunk_process(chunk, host):
     # scienfic notation. ?: indicts non-capturing group
     sn_tag = re.compile('[+\-]?(?:0|[1-9]\d*)(?:\.\d*)?(?:[eE][+\-]?\d+)?')
     # injection information in the style of 'injection-75-142.9  198'
-    r_tag = re.compile('injection-([-+]?[0-9]*\.?[0-9]+)-([-+]?[0-9]*\.?[0-9]+)[\s-](\d*)')
-    
-#   trapped_tag = re.compile('Trapped - Zone')
+    r_tag = re.compile('injection-([-+]?[0-9]*\.?[0-9]+)-([-+]?[0-9]*\.?[0-9]+)')
+    # trapped_tag = re.compile('Trapped - Zone')
     escaped_tag = re.compile('Escaped - Zone')
+    # labeling the final results of the particle tracking.
+    collectionStatus = ['Incomplete', 'Trapped', 'Escaped', 'Net']
+
     basicInfo = [] # diameter and angle
 #    trapped_temp = {}    
     escaped_temp = {}
@@ -81,13 +91,12 @@ def chunk_process(chunk, host):
                 r       = r_list[1]
                 basicInfo.append(r_list[0])
                 basicInfo.append(r_list[2])
-            else:
-                # This is the injection results section
-                stats = map(float, sn_tag.findall(chunk[i]))
-                stats[0] = int(stats[0])
-                escaped_temp[stats[0]] = stats[1:]
-                host[r] = escaped_temp
     return basicInfo 
+
+    # This is the injection results section
+    # starting here "Trapped", "Escaped", "Incomplete" & "Net" are analyzed
+    # separately
+
     
 def writeExcel(fileName, host, basicInfo):
     import numpy as np
