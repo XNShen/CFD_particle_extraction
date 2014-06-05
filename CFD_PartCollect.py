@@ -1,19 +1,35 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Apr 25 11:02:08 2014
+Created on Wed Jun 04 14:59:16 2014
 
-Script that handles CFD output files
-
-Based on Xiaoning's Code
-
-Not optimized: basic info should be grabbed once and for all
-
-@author: Rongxiao Zhang
+@author: Rongxiao.Zhang
 """
 
 import Tkinter,tkFileDialog
 import os
 import re
+import pandas as pd
+import numpy as np
+
+
+def merge_dataFrame(dataTotal):
+    for i in range(4):
+        for j in range(1, len(dataTotal)):
+            dataTotal[0][i] = pd.concat([dataTotal[0][i], dataTotal[j][i]], axis=1, join='inner')
+    return dataTotal[0][:]
+
+def writeExcel(file_name, df_list):
+    w = pd.ExcelWriter(file_name)
+    num_groups = 4 # input is MxNx4
+    names = ['Incomplete', 'Trapped', 'Escaped', 'Net']
+    start_row = 0
+    
+    for item, i in zip(df_list, range(num_groups)):
+        size_x = item.shape[0]
+        item.to_excel(w, startrow = start_row, startcol = 0, index_label=names[i])
+        start_row += (size_x + 3)
+
+    w.save()
 
 def readExcel(fileName, tag):
     '''
@@ -39,15 +55,16 @@ def readExcel(fileName, tag):
     book = open_workbook(fileName)
     sheet = book.sheet_by_index(sheetIndex)
    
-    dataGroup = None
-    
-    # for each column, read in the entire section into memory for processing    
-    for colNum in range(sheet.ncols):  # loop through columns
-        if (sheet.cell(0, colNum) != ''):
+    dataTotal = []
+    for colNum in range(sheet.ncols):
+        dataGroup = []
+        dataTemp = []
+            
+        if (sheet.cell_value(0, colNum) != ''):
             # if the header string exist, continue reading the column
             # otherwise jump the next column
-            colName.append(sheet.cell(0, colNum))
-            
+    
+            colName.append(sheet.cell_value(0, colNum))
             col_values = sheet.col_values(colNum) # grab values
             # Grab the data marked between tags
             for ind, x in enumerate(col_values): 
@@ -61,33 +78,38 @@ def readExcel(fileName, tag):
                     (tag.search(col_values[ind + counter]) == None)):                        
                         chunk.append(col_values[ind + counter])
                         counter += 1
-                        dataSeg, rowName = chunk_process(chunk)
-                        # load the data into the entire data 'dataOut'
-                        if dataGroup == None:
-                            dataGroup = {pd.DataFrame(dataSeg[:,x], index=rowName, \
-                                                columns=[sheet.cell(0, colNum)])   \
-                                                for x in range(4)}                                  
-                        else:
-                            dataTemp = {pd.DataFrame(dataSeg[:,x], index=rowName, \
-                                                columns=[sheet.cell(0, colNum)])   \
-                                                for x in range(4)}       
-                            dataGroup = {pd.concat([dataGroup[i],dataTemp[i]], join='outer') \
-                                                for i in range(4)}                                         
-                    ind += counter
-        
-    return dataGroup
+                        
+                    dataSeg, rowName = chunk_process(chunk)
+                        
+                     
+                    if dataGroup == []:
+                        for i in range(4):
+                            dataGroup.append(pd.DataFrame(dataSeg[:,i], index=rowName, \
+                                                columns=[sheet.cell_value(0, colNum)]))
+                    else:
+                        for i in range(4):
+                            dataTemp.append(pd.DataFrame(dataSeg[:,i], index=rowName, \
+                                                columns=[sheet.cell_value(0, colNum)]))     
+                            dataGroup[i] = pd.concat([dataGroup[i], dataTemp[i]], axis=0, join='inner')
+                        dataTemp = []                         
+                                    
+                        ind += counter
+    
+            dataTotal.append(dataGroup) 
+                        # ALl chunked at each col is loaded to the memory   
+    return dataTotal
 
 def chunk_process(chunk):
     '''
     Extract the collection data of each chunk from Excel 
     '''
-    import numpy as np
     # injection information in the style of 'injection-75-142.9  198'
     r_tag = re.compile('injection-(?:[-+]?[0-9]*\.?[0-9]+)-([-+]?[0-9]*\.?[0-9]+)')
     # trapped_tag = re.compile('Trapped - Zone')
     escaped_tag = re.compile('Escaped - Zone')
+    trapped_tag = re.compile('Trapped - Zone')
     # labeling the final results of the particle tracking.
-    res_tag = 'Mass Transfer Summary'    
+    res_tag = re.compile('Mass Transfer Summary')    
     # characters for separating counting lines
     sepChar = '----'
     collectionStatus = ['Incomplete', 'Trapped', 'Escaped', 'Net']
@@ -103,13 +125,13 @@ def chunk_process(chunk):
     # looping through the given column
     for i in range(np.size(chunk)):
         # find 'Escaped - Zone' line -- input information
-        if (escaped_tag.search(chunk[i]) != None):
+        if (escaped_tag.search(chunk[i]) != None or trapped_tag.search(chunk[i])):
             # find injection information 'injection-75-142.9  198'
             if(r_tag.search(chunk[i]) != None):
+
                 # This is the injection info section
                 # extract the numbers of the 'injection...' string
-                r_list  = {np.float(x) for x in r_tag.findall(chunk[i])[0]}
-                dia     = r_list[0]
+                dia  = r_tag.findall(chunk[i])[0]
                 # forming the row name
                 diaList.append(dia)
 
@@ -117,35 +139,32 @@ def chunk_process(chunk):
         # starting here "Trapped", "Escaped", "Incomplete" & "Net" are analyzed
         # separately
         if (res_tag.search(chunk[i]) != None):
-        # find the 'mass transfer summary' name tag
+        # find the 'mass transfer summary' name tagn
             k = 0                       # advancing index 
             SingleLineMarker = 0        # Possible single results
             # Read each line of the summary results
             # '- - - -' is the separation line
-            while not (sepChar in chunk(i+5+k)):  
+            while ((i+k+5) < 12 and (sepChar not in chunk[i+k+5])):  
             # still in the detail report
-                match = re.search(pat, chunk(i+5+k))  
+                match = re.search(pat, chunk[i+k+5])
                 # extract the mass fraction
                 if match:  # regular expression matching successful
                     if match.group(1) in collectionStatus:  
                         index = collectionStatus.index(match.group(1))
                         dataArray[sizeCnt, index] = float(match.group(3))
+                        SingleLineMarker += 1
                     else:
                         print 'The initial items are unexpected.'
                         print 'The matched string is: %s' %match.group()
-                        print 'The original string is: %s' %chunk(i+5+k)                       
-                else: # match failed indict the summary has only a single line
-                    #print 'Regular expression confronts unexpected patterns. (Reading results)'
-                    #print 'The original string is: %s' %sheet.cell_value(i+5+k,j)                       
-                    SingleLineMarker = 1     
-                    break   # indict "Trapped" is complete
+                        print 'The original string is: %s' %chunk[i+k+5]                       
+
                 k = k + 1
             
             # - - - - 
             # When '- - - -' is met, move the next line
             if SingleLineMarker < 1:
                 k = k+1
-                match = re.search(pat,chunk(i+5+k))  
+                match = re.search(pat,chunk[i+5+k])  
                 # extract the mass fraction
                 if match:  # regular expression matching successful
                     if match.group(1) in collectionStatus:  
@@ -155,104 +174,25 @@ def chunk_process(chunk):
                         else:
                             print 'Index is %d' % index
                             print 'The line should start with *Net*'
-                            print 'The original string is: %s' %chunk(i+5+k)
+                            print 'The original string is: %s' %chunk[i+5+k]
                     else:
                         print 'Regular expression confronted unexpected pattern (Reading Net)'
                         print 'The matched string is: %s' %match.group()
-                        print 'The original string is: %s' %chunk(i+5+k)                    
+                        print 'The original string is: %s' %chunk[i+5+k]                      
+                        print 'The original string is: %s' %chunk[i+5+k]                 
                 else:
                     print 'Regular expression mis-match'
-                    print 'The original string is: %s' %chunk(i+5+k)
+                    print 'The original string is: %s' %chunk[i+5+k]
             else:
                 # if SingLeLineMarker on, copy the previous line
                 dataArray[sizeCnt, 3] =  dataArray[sizeCnt, index]
                     
             sizeCnt=sizeCnt+1   # 'Mass Transfer Summary' is found 
-            i = i+k+5           # jump the next block
+            i = i+1             # jump the next block
         else:
             i = i+1
-            
-    return dataArray[0:sizeCnt,:], diaList
 
-    # This is the injection results section
-    # starting here "Trapped", "Escaped", "Incomplete" & "Net" are analyzed
-    # separately
-
-    
-def writeExcel(fileName, host, basicInfo):
-    import numpy as np
-    from xlwt import Workbook, Formula, easyxf
-    from xlrd import cellname
-    
-    book = Workbook()
-    sheet1 = book.add_sheet('Results') 
-    
-    # Basic Info
-    sheet1.row(0).write(0, 'Diameter', easyxf('font: name Arial;'))
-    sheet1.row(0).write(1, basicInfo[0], easyxf('font: name Arial;'))
-    sheet1.row(0).write(2, 'Release Angle', easyxf('font: name Arial;'))
-    sheet1.row(0).write(3, basicInfo[1], easyxf('font: name Arial;'))
-    
-    keyList = []
-    groupList = []
-
-    # sort the keylist
-    for key, value in host.iteritems():
-        keyList.append(key)
-        tempGroupList = []
-        for key2, value2 in value.iteritems():
-            tempGroupList.append(key2)
-        if np.size(tempGroupList) > np.size(groupList):
-            groupList = np.sort(tempGroupList)
-
-    keyList = np.sort(keyList)
-    # set column width
-    for i in range((np.size(groupList) + 1) * 2):
-        sheet1.col(i).width = 4000
-    
-    for i in range(np.size(keyList)):
-        # writing r
-        sheet1.row(i+2).write(0, keyList[i], easyxf('font: name Arial;'))
-        sheet1.row(i+2).write(3 + np.size(groupList), keyList[i], \
-                              easyxf('font: name Arial;'))
-        
-        sheet1.row(i+2).write(np.size(groupList) + 1,\
-                              Formula('SUM(%s:%s)' % (cellname(i+2, 1), \
-                              cellname(i+2, np.size(groupList)))), \
-                              easyxf('font: name Arial;', num_format_str='0.00E+00'))
-                              
-        sheet1.row(i+2).write(2 * np.size(groupList) + 4, \
-                              Formula('SUM(%s:%s)' % \
-                              (cellname(i+2, 4 + np.size(groupList)), \
-                              cellname(i+2, 3 + 2 * np.size(groupList)))), \
-                              easyxf('font: name Arial;', num_format_str='0.00%'))
-                              
-        for j in range(np.size(groupList)):
-            try:
-                sheet1.row(i+2).write(j+1, host[keyList[i]][groupList[j]][0], \
-                                      easyxf('font: name Arial;', \
-                                      num_format_str='0.00E+00'))
-            except KeyError:
-                pass
-            
-    for i in range(np.size(groupList)):
-        # writing group names
-        sheet1.row(1).write(i + 1, groupList[i], easyxf('font: name Arial;'))
-        sheet1.row(1).write(i + 4 + np.size(groupList), groupList[i], \
-                            easyxf('font: name Arial;'))
-        
-        for j in range(np.size(keyList)):
-            sheet1.row(j + 2).write(i + 4 + np.size(groupList), \
-                                    Formula('%s / %s' % (cellname(j+2, i+1), \
-                                    cellname(j+2, np.size(groupList) + 1))), \
-                                    easyxf('font: name Arial;', num_format_str='0.00%'))
-        
-    sheet1.row(1).write(np.size(groupList) + 1, 'Total', \
-                        easyxf('font: name Arial;'))
-    sheet1.row(1).write(np.size(groupList) * 2 + 4 , 'Total', \
-                        easyxf('font: name Arial;'))
-    
-    book.save(fileName)   
+    return dataArray[0:sizeCnt,:], [dia]
 
 def main():
     rt = Tkinter.Tk()
@@ -262,8 +202,9 @@ def main():
     outName = ''.join([fileName_wPath, '_Results.xls'])
     
     tag = re.compile('number tracked')
-    host, basicInfo = readExcel(fileName, tag)
-    writeExcel(outName, host, basicInfo)
+    dataGroup = readExcel(fileName, tag)  
+    dataGroup = merge_dataFrame(dataGroup)
+    writeExcel(outName, dataGroup)
 
 if __name__ == '__main__':
     main()
