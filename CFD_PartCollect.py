@@ -15,7 +15,7 @@ import numpy as np
 def merge_dataFrame(dataTotal):
     for i in range(4):
         for j in range(1, len(dataTotal)): # len(dataTotal) is the number of column.
-            dataTotal[0][i] = pd.concat([dataTotal[0][i], dataTotal[j][i]], axis=1, join='inner')
+            dataTotal[0][i]=pd.concat([dataTotal[0][i],dataTotal[j][i]], axis=1, join='outer')
     return dataTotal[0][:]
 
 def writeExcel(file_name, df_list):
@@ -92,11 +92,18 @@ def readExcel(fileName, tag):
                             dataTemp.append(pd.DataFrame(dataSeg[i], index=rowName, \
                                                 columns=[sheet.cell_value(0, colNum)]))
                             dataGroup[i] = pd.concat([dataGroup[i], dataTemp[i]], axis=0, join='inner')
-                        # clear dataTemp for next time.
+                         # clear dataTemp for next time.
                         dataTemp = []                         
                     # jump over the analyzed chunk.
                     ind += counter
-    
+            # remove the duplicate indices
+            for i in range(4):
+                df = dataGroup[i]
+                df["index"] = df.index
+                df.drop_duplicates(cols='index', take_last=True, inplace=True)
+                del df["index"]
+                dataGroup[i] = df.sort()
+
             dataTotal.append(dataGroup) 
             # ALl chunked at each col is loaded to the memory   
     return dataTotal
@@ -113,9 +120,8 @@ def chunk_process(chunk):
     # labeling the final results of the particle tracking.
     res_tag = re.compile('Mass Transfer Summary')    
     # characters for separating counting lines
-    sepChar = '----'
     collectionStatus = ['Incomplete', 'Trapped', 'Escaped', 'Net']
-    lineOffset = 5
+    lineOffset = 4
     # regular expression for " Trapped - Zone 22       1.042e-04  1.042e-04  0.000e+00"
     pat = r'\s+(\w+).(-.\w+\s\d+)?\s+(\d+\.\d+[e|E][+|-]\d+)\s+(\d+\.\d+[e|E][+|-]\d+)\s+(\d+\.\d+[e|E][+|-]\d+)' 
 
@@ -147,8 +153,7 @@ def chunk_process(chunk):
             #                  b)'----' is not in the line
             # Bascially, search between '----' and '-----'
             # '5' is the preset offset
-            while ((i+k+lineOffset) < len(chunk) and \
-                        (sepChar not in chunk[i+k+lineOffset])):  
+            while ((i+k+lineOffset) < len(chunk)):  
                 # Search for reports on "Trapped", "Escaped", "Incomplete" & "Net" 
                 match = re.search(pat, chunk[i+k+lineOffset])
                 # extract the mass fraction
@@ -161,35 +166,38 @@ def chunk_process(chunk):
                     else:
                         print 'The initial items are unexpected. Change the lineOffset value.'
                         print 'The matched string is: %s' %match.group()
-                        print 'The original string is: %s' %chunk[i+k+lineOffset]                       
+                        print 'The original string is: %s' %chunk[i+k+lineOffset]
                 k = k + 1
-            
+
+            if ResLineNum < 2:
+                dataArray[3] =  dataArray[index]
+
             # When '- - - -' is met, move the next line
             # If only one line is present, then no need to analyzing the following line.
-            if ResLineNum > 1:
-                k = k + 1     # jump over '---' line
-                match = re.search(pat,chunk[i+k+lineOffset])  
-                # extract the mass fraction
-                if match:  # regular expression matching successful
-                    if match.group(1) in collectionStatus:  
-                        index = collectionStatus.index(match.group(1))
-                        if index == 3:          # This line has to be 'Net'
-                            dataArray[index] = float(match.group(3))
-                        else:
-                            print 'Index is \" %s \"' % collectionStatus[index]
-                            print 'The line should start with *Net*'
-                            print 'The original string is: %s' %chunk[i+lineOffset+k]
-                    else:
-                        print 'Regular expression finds items out of four choices (Reading Net)'
-                        print 'The matched string is: %s' %match.group()
-                        print 'The original string is: %s' %chunk[i+lineOffset+k]                      
-                        print 'The original string is: %s' %chunk[i+lineOffset+k]                 
-                else:
-                    print 'Regular expression mis-match. The *Net* line is not formatted correctly.'
-                    print 'The original string is: %s' %chunk[i+lineOffset+k]
-            else:
-                # if SingLeLineMarker on, copy the previous line
-                dataArray[3] =  dataArray[index]
+#            if ResLineNum > 1:
+#                k = k + 1     # jump over '---' line
+#                match = re.search(pat,chunk[i+k+lineOffset])  
+#                # extract the mass fraction
+#                if match:  # regular expression matching successful
+#                    if match.group(1) in collectionStatus:  
+#                        index = collectionStatus.index(match.group(1))
+#                        if index == 3:          # This line has to be 'Net'
+#                            dataArray[index] = float(match.group(3))
+#                        else:
+#                            print 'Index is \" %s \"' % collectionStatus[index]
+#                            print 'The line should start with *Net*'
+#                            print 'The original string is: %s' %chunk[i+lineOffset+k]
+#                    else:
+#                        print 'Regular expression finds items out of four choices (Reading Net)'
+#                        print 'The matched string is: %s' %match.group()
+#                        print 'The original string is: %s' %chunk[i+lineOffset+k]                      
+#                        print 'The original string is: %s' %chunk[i+lineOffset+k]                 
+#                else:
+#                    print 'Regular expression mis-match. The *Net* line is not formatted correctly.'
+#                    print 'The original string is: %s' %chunk[i+lineOffset+k]
+#            else:
+#                # if SingLeLineMarker on, copy the previous line
+#                dataArray[3] =  dataArray[index]
 
     return dataArray, [dia]
 
