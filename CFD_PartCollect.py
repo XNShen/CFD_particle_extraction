@@ -14,7 +14,7 @@ import numpy as np
 
 def merge_dataFrame(dataTotal):
     for i in range(4):
-        for j in range(1, len(dataTotal)):
+        for j in range(1, len(dataTotal)): # len(dataTotal) is the number of column.
             dataTotal[0][i] = pd.concat([dataTotal[0][i], dataTotal[j][i]], axis=1, join='inner')
     return dataTotal[0][:]
 
@@ -36,13 +36,11 @@ def readExcel(fileName, tag):
     reads and extracts info from the given excel file
     Input:  fileName -- file name including the directory path
             tag -- Identifier to the next reading block
-    Output: dataCollection  -- M x N x 4 
+    Output: dataTotal       -- N x 4 list of 1 x M pandas dataFrame 
                                M: row num, indicting the diameter
                                N: col num, indicting the set parameter
                                4: four types of the collection, i.e. 
                                "Escaped", "Trapped", "Incomplete", "Net"
-            rowName         -- 1 x M list of the diameter
-            colName         -- 1 x N list of the set parameter
     '''
     import pandas as pd
     from xlrd import open_workbook
@@ -86,12 +84,12 @@ def readExcel(fileName, tag):
                     # initiate the entire data array if not exist yet.                        
                     if len(dataGroup) == 0:
                         for i in range(4): # "Escaped", "Trapped", "Incomplete", "Net"
-                            dataGroup.append(pd.DataFrame(dataSeg[:,i], index=rowName, \
+                            dataGroup.append(pd.DataFrame(dataSeg[i], index=rowName, \
                                                 columns=[sheet.cell_value(0, colNum)]))
                     # if the final result array exists, merge with the current new data.
                     else:
                         for i in range(4):
-                            dataTemp.append(pd.DataFrame(dataSeg[:,i], index=rowName, \
+                            dataTemp.append(pd.DataFrame(dataSeg[i], index=rowName, \
                                                 columns=[sheet.cell_value(0, colNum)]))
                             dataGroup[i] = pd.concat([dataGroup[i], dataTemp[i]], axis=0, join='inner')
                         # clear dataTemp for next time.
@@ -193,7 +191,7 @@ def chunk_process(chunk):
                 # if SingLeLineMarker on, copy the previous line
                 dataArray[3] =  dataArray[index]
 
-    return dataArray, dia
+    return dataArray, [dia]
 
 def main():
     rt = Tkinter.Tk()
