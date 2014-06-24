@@ -79,7 +79,7 @@ def readExcel(fileName, tag):
                         counter += 1
                     
                     # extract the data and row name                       
-                    dataSeg, rowName = chunk_process(chunk)
+                    dataSeg = chunk_process(chunk)
                     
                     # initiate the entire data array if not exist yet.                        
                     if len(dataGroup) == 0:
@@ -185,7 +185,7 @@ def chunk_process(chunk):
 #                # if SingLeLineMarker on, copy the previous line
 #                dataArray[3] =  dataArray[index]
 
-    return dataArrays
+    return dataArray
 
 def main():
     rt = Tkinter.Tk()
